@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Video Link Collector",
+  "version": "1.0",
+  "description": "Tự động thu thập link từ Facebook Reels, TikTok và Instagram",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://www.tiktok.com/*",
+    "https://www.instagram.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.facebook.com/*",
+        "https://www.tiktok.com/*",
+        "https://www.instagram.com/*"
+      ],
+      "js": ["utils.js", "content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
