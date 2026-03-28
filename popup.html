@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h2>Video Link Collector</h2>
+    
+    <div class="status-section">
+      <div class="status-indicator">
+        <span id="statusText">Đã dừng</span>
+        <div id="statusDot" class="status-dot stopped"></div>
+      </div>
+    </div>
+
+    <div class="stats-section">
+      <div class="stat">
+        <label>Tổng số link:</label>
+        <span id="linkCount">0</span>
+      </div>
+      <div class="stat">
+        <label>Nền tảng:</label>
+        <span id="platformStats">-</span>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button id="startBtn" class="btn btn-start">▶ Bắt đầu</button>
+      <button id="stopBtn" class="btn btn-stop" disabled>⏹ Dừng</button>
+      <button id="exportBtn" class="btn btn-export">📥 Export</button>
+      <button id="clearBtn" class="btn btn-clear">🗑 Xóa hết</button>
+    </div>
+
+    <div class="info-section">
+      <div class="info-item">
+        <strong>Hướng dẫn:</strong><br>
+        1. Nhấn "Bắt đầu"<br>
+        2. Lướt Facebook/TikTok/Instagram<br>
+        3. Tool tự động lưu link<br>
+        4. Nhấn "Export" để xuất file
+      </div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
