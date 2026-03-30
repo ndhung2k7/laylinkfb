@@ -3,7 +3,7 @@ let isActive = false;
 let lastUrl = '';
 let checkInterval = null;
 let feedScanInterval = null;
-let processedLinks = new Set(); // Lưu các link đã xử lý trong phiên hiện tại
+let processedLinks = new Set();
 let lastScanCount = 0;
 
 // Check if extension is active
@@ -31,22 +31,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
-// ==================== URL Monitoring (thanh địa chỉ) ====================
+// ==================== URL Monitoring ====================
 function startMonitoring() {
   if (checkInterval) return;
   
   lastUrl = window.location.href;
   
-  // Check URL every 1 second
   checkInterval = setInterval(() => {
     if (!isActive) return;
     
     const currentUrl = window.location.href;
     if (currentUrl !== lastUrl) {
-      // URL changed, check if it's a video/reel
       const platform = PlatformDetector.detect(currentUrl);
       
-      // Only collect if it's a video/reel content
       if (platform.includes('Reels') || platform.includes('Video') || 
           (platform === 'Instagram Post')) {
         
@@ -71,15 +68,13 @@ function stopMonitoring() {
   }
 }
 
-// ==================== Feed Scanning (Quét link trong feed) ====================
+// ==================== Feed Scanning ====================
 function startFeedScan() {
   if (feedScanInterval) return;
   
-  // Reset processed links khi bắt đầu quét mới
   processedLinks.clear();
   lastScanCount = 0;
   
-  // Quét feed mỗi 2 giây
   feedScanInterval = setInterval(() => {
     if (!isActive) return;
     scanFeedForLinks();
@@ -103,31 +98,32 @@ function scanFeedForLinks() {
   let foundNewLinks = 0;
   
   allLinks.forEach(linkElement => {
-    const href = linkElement.getAttribute('href');
+    let href = linkElement.getAttribute('href');
     if (!href) return;
     
-    // Tạo full URL nếu là relative path
+    // Xử lý relative URLs
     let fullUrl = href;
     if (href.startsWith('/')) {
       fullUrl = window.location.origin + href;
     } else if (href.startsWith('./')) {
       fullUrl = window.location.origin + href.substring(1);
-    } else if (!href.startsWith('http')) {
-      // Bỏ qua các link javascript: hoặc # 
+    } else if (!href.startsWith('http') && !href.startsWith('https')) {
+      // Bỏ qua các link không hợp lệ
       return;
     }
     
-    // Kiểm tra xem link có phải là video/reel không
+    // Kiểm tra link có phải video không
     const videoInfo = isVideoLink(fullUrl, currentPlatform);
+    
     if (videoInfo && videoInfo.isVideo) {
-      // Kiểm tra xem link đã được xử lý trong phiên này chưa
+      // Kiểm tra trùng lặp trong phiên
       if (!processedLinks.has(fullUrl)) {
         processedLinks.add(fullUrl);
         foundNewLinks++;
         
         const cleanUrl = PlatformDetector.extractVideoUrl(fullUrl);
         
-        console.log(`[Feed Scan] Found new ${videoInfo.platform}: ${cleanUrl}`);
+        console.log(`[${currentPlatform.toUpperCase()} Feed Scan] Found: ${cleanUrl}`);
         
         chrome.runtime.sendMessage({
           action: 'newUrl',
@@ -138,14 +134,8 @@ function scanFeedForLinks() {
     }
   });
   
-  // Log thông tin quét
   if (foundNewLinks > 0) {
-    console.log(`[Feed Scan] Collected ${foundNewLinks} new links from feed. Total in session: ${processedLinks.size}`);
-  }
-  
-  // Kiểm tra nếu số lượng link thay đổi đột ngột (có thể do infinite scroll)
-  if (allLinks.length !== lastScanCount) {
-    lastScanCount = allLinks.length;
+    console.log(`[Feed Scan] Collected ${foundNewLinks} new links. Total: ${processedLinks.size}`);
   }
 }
 
@@ -160,35 +150,34 @@ function detectCurrentPlatform() {
 function isVideoLink(url, platform) {
   switch(platform) {
     case 'facebook':
-      // Facebook: /reels/ hoặc /reel/ (reel trong link)
       if (url.includes('/reels/') || url.includes('/reel/')) {
         return { isVideo: true, platform: 'Facebook Reels' };
       }
-      // Một số dạng Facebook video khác
       if (url.includes('/videos/') && !url.includes('/watch')) {
         return { isVideo: true, platform: 'Facebook Video' };
       }
       break;
       
     case 'tiktok':
-      // TikTok: /video/ là chính xác nhất
+      // TikTok patterns
       if (url.includes('/video/')) {
         return { isVideo: true, platform: 'TikTok Video' };
       }
-      // TikTok cũng có dạng /v/ cho video ngắn
+      // Pattern cho @username/video/id
+      if (url.match(/@[\w.]+\/video\/\d+/)) {
+        return { isVideo: true, platform: 'TikTok Video' };
+      }
+      // Pattern cho /v/ID
       if (url.match(/\/v\/\d+/)) {
         return { isVideo: true, platform: 'TikTok Video' };
       }
       break;
       
     case 'instagram':
-      // Instagram: /reel/ hoặc /p/
       if (url.includes('/reel/')) {
         return { isVideo: true, platform: 'Instagram Reels' };
       }
       if (url.includes('/p/')) {
-        // Instagram post có thể là ảnh hoặc video
-        // Ta vẫn thu thập để background xử lý
         return { isVideo: true, platform: 'Instagram Post' };
       }
       break;
@@ -208,7 +197,6 @@ function setupMutationObserver() {
   observer = new MutationObserver((mutations) => {
     if (!isActive) return;
     
-    // Kiểm tra nếu có thêm node mới vào DOM (infinite scroll)
     let hasNewContent = false;
     for (const mutation of mutations) {
       if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
@@ -217,7 +205,6 @@ function setupMutationObserver() {
       }
     }
     
-    // Nếu có nội dung mới, quét ngay lập tức (không cần chờ interval)
     if (hasNewContent) {
       setTimeout(() => {
         if (isActive) {
@@ -233,7 +220,7 @@ function setupMutationObserver() {
   });
 }
 
-// ==================== History API monitoring (cho SPA) ====================
+// ==================== History API monitoring ====================
 let lastPushState = location.href;
 const pushState = history.pushState;
 history.pushState = function() {
@@ -241,7 +228,6 @@ history.pushState = function() {
   if (isActive) {
     setTimeout(() => {
       checkUrlChange();
-      // Khi chuyển trang, reset processed links và quét lại feed
       processedLinks.clear();
       setTimeout(() => scanFeedForLinks(), 500);
     }, 100);
@@ -287,7 +273,7 @@ function checkUrlChange() {
   }
 }
 
-// ==================== Debounced scroll event (optional) ====================
+// ==================== Scroll event ====================
 let scrollTimeout = null;
 window.addEventListener('scroll', () => {
   if (!isActive) return;
@@ -297,7 +283,6 @@ window.addEventListener('scroll', () => {
   }
   
   scrollTimeout = setTimeout(() => {
-    // Khi người dùng scroll, quét thêm một lần nữa
     if (isActive) {
       scanFeedForLinks();
     }
@@ -305,10 +290,9 @@ window.addEventListener('scroll', () => {
 });
 
 // ==================== Initialize ====================
-console.log('Video Link Collector content script loaded - Enhanced with feed scanning');
+console.log('Video Link Collector - Enhanced TikTok scanning enabled');
 setupMutationObserver();
 
-// Lần quét đầu tiên sau khi load trang
 setTimeout(() => {
   if (isActive) {
     scanFeedForLinks();
