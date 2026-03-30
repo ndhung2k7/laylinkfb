@@ -26,12 +26,46 @@ const PlatformDetector = {
   },
   
   extractVideoUrl(url) {
-    // Clean URL by removing tracking parameters
-    const urlObj = new URL(url);
-    const cleanParams = ['utm_source', 'utm_medium', 'utm_campaign', 'fbclid', 'ref'];
-    cleanParams.forEach(param => urlObj.searchParams.delete(param));
-    return urlObj.toString();
+    try {
+      // Clean URL by removing tracking parameters
+      const urlObj = new URL(url);
+      const cleanParams = ['utm_source', 'utm_medium', 'utm_campaign', 'fbclid', 'ref', 'e', 's', 'type'];
+      cleanParams.forEach(param => urlObj.searchParams.delete(param));
+      
+      // Loại bỏ các ký tự đặc biệt cuối URL
+      let cleanUrl = urlObj.toString();
+      cleanUrl = cleanUrl.replace(/[\/?#]$/, '');
+      
+      return cleanUrl;
+    } catch (e) {
+      // Nếu URL không hợp lệ, trả về original
+      return url;
+    }
+  },
+  
+  getPlatformType(url) {
+    if (url.includes('facebook.com')) return 'facebook';
+    if (url.includes('tiktok.com')) return 'tiktok';
+    if (url.includes('instagram.com')) return 'instagram';
+    return 'unknown';
   }
+};
+
+// Video patterns for different platforms
+const VideoPatterns = {
+  facebook: [
+    { pattern: /\/reels\/|\/reel\//, type: 'Facebook Reels' },
+    { pattern: /\/videos\/(?!watch)/, type: 'Facebook Video' }
+  ],
+  tiktok: [
+    { pattern: /\/video\//, type: 'TikTok Video' },
+    { pattern: /\/v\/\d+/, type: 'TikTok Video' },
+    { pattern: /@[\w.]+\/video\/\d+/, type: 'TikTok Video' } // Pattern cho link TikTok dạng @username/video/id
+  ],
+  instagram: [
+    { pattern: /\/reel\//, type: 'Instagram Reels' },
+    { pattern: /\/p\//, type: 'Instagram Post' }
+  ]
 };
 
 // Debounce function to prevent too many checks
@@ -46,23 +80,8 @@ function debounce(func, wait) {
     timeout = setTimeout(later, wait);
   };
 }
-// Thêm vào utils.js
-const VideoPatterns = {
-  facebook: [
-    { pattern: /\/reels\/|\/reel\//, type: 'Facebook Reels' },
-    { pattern: /\/videos\/(?!watch)/, type: 'Facebook Video' }
-  ],
-  tiktok: [
-    { pattern: /\/video\//, type: 'TikTok Video' },
-    { pattern: /\/v\/\d+/, type: 'TikTok Video' }
-  ],
-  instagram: [
-    { pattern: /\/reel\//, type: 'Instagram Reels' },
-    { pattern: /\/p\//, type: 'Instagram Post' }
-  ]
-};
 
-// Hàm kiểm tra link video nâng cao
+// Hàm kiểm tra link video
 function isVideoLinkAdvanced(url, platform) {
   const patterns = VideoPatterns[platform];
   if (!patterns) return null;
