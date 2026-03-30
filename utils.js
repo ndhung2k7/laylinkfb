@@ -46,3 +46,31 @@ function debounce(func, wait) {
     timeout = setTimeout(later, wait);
   };
 }
+// Thêm vào utils.js
+const VideoPatterns = {
+  facebook: [
+    { pattern: /\/reels\/|\/reel\//, type: 'Facebook Reels' },
+    { pattern: /\/videos\/(?!watch)/, type: 'Facebook Video' }
+  ],
+  tiktok: [
+    { pattern: /\/video\//, type: 'TikTok Video' },
+    { pattern: /\/v\/\d+/, type: 'TikTok Video' }
+  ],
+  instagram: [
+    { pattern: /\/reel\//, type: 'Instagram Reels' },
+    { pattern: /\/p\//, type: 'Instagram Post' }
+  ]
+};
+
+// Hàm kiểm tra link video nâng cao
+function isVideoLinkAdvanced(url, platform) {
+  const patterns = VideoPatterns[platform];
+  if (!patterns) return null;
+  
+  for (const item of patterns) {
+    if (item.pattern.test(url)) {
+      return item.type;
+    }
+  }
+  return null;
+}
