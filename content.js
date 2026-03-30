@@ -1,108 +1,87 @@
-// Content script that runs on Facebook, TikTok, Instagram
+// Biến kiểm soát trạng thái hoạt động
 let isActive = false;
-let lastUrl = '';
-let checkInterval = null;
+let scanInterval = null;
 
-// Check if extension is active
-chrome.storage.local.get(['isRunning'], (result) => {
-  isActive = result.isRunning || false;
-  if (isActive) {
-    startMonitoring();
-  }
+// Lấy trạng thái ban đầu từ storage
+chrome.storage.local.get(['isActive'], (result) => {
+    isActive = result.isActive || false;
+    if (isActive) {
+        startScanning();
+    }
 });
 
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'start') {
-    isActive = true;
-    startMonitoring();
-    sendResponse({ success: true });
-  } else if (request.action === 'stop') {
-    isActive = false;
-    stopMonitoring();
-    sendResponse({ success: true });
-  }
-  return true;
+// Lắng nghe lệnh từ Popup (Bật/Tắt)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'toggleStatus') {
+        isActive = message.isActive;
+        if (isActive) {
+            startScanning();
+        } else {
+            stopScanning();
+        }
+    }
 });
 
-function startMonitoring() {
-  if (checkInterval) return;
-  
-  lastUrl = window.location.href;
-  
-  // Check URL every 1 second
-  checkInterval = setInterval(() => {
+/**
+ * Hàm quét tất cả các link video trên màn hình
+ */
+function scanLinksOnPage() {
     if (!isActive) return;
+
+    // Tìm tất cả các thẻ <a> có thuộc tính href
+    const allLinks = document.querySelectorAll('a[href]');
     
-    const currentUrl = window.location.href;
-    if (currentUrl !== lastUrl) {
-      // URL changed, check if it's a video/reel
-      const platform = PlatformDetector.detect(currentUrl);
-      
-      // Only collect if it's a video/reel content
-      if (platform.includes('Reels') || platform.includes('Video') || 
-          (platform === 'Instagram Post')) {
+    allLinks.forEach(linkElement => {
+        const rawUrl = linkElement.href;
         
-        const cleanUrl = PlatformDetector.extractVideoUrl(currentUrl);
-        
-        chrome.runtime.sendMessage({
-          action: 'newUrl',
-          url: cleanUrl,
-          platform: platform
-        });
-      }
-      
-      lastUrl = currentUrl;
+        // Sử dụng PlatformDetector (từ utils.js) để nhận diện
+        const platform = PlatformDetector.detect(rawUrl);
+
+        // Chỉ xử lý nếu link đúng là Video hoặc Reel
+        if (platform !== 'Unknown' && platform !== 'Facebook' && platform !== 'TikTok' && platform !== 'Instagram') {
+            const cleanUrl = PlatformDetector.extractVideoUrl(rawUrl);
+            
+            // Gửi link về background.js để xử lý lưu trữ và chống trùng
+            chrome.runtime.sendMessage({
+                action: 'newUrl',
+                url: cleanUrl,
+                platform: platform
+            });
+        }
+    });
+}
+
+/**
+ * Bắt đầu chu kỳ quét
+ */
+function startScanning() {
+    console.log("Video Link Collector: Started scanning...");
+    // Quét ngay lập tức khi bật
+    scanLinksOnPage();
+    
+    // Quét định kỳ mỗi 2 giây để bắt các video mới khi cuộn trang
+    if (!scanInterval) {
+        scanInterval = setInterval(scanLinksOnPage, 2000);
     }
-  }, 1000); // Check every 1 second
 }
 
-function stopMonitoring() {
-  if (checkInterval) {
-    clearInterval(checkInterval);
-    checkInterval = null;
-  }
-}
-
-// Also listen for URL changes via History API (for SPAs)
-let lastPushState = location.href;
-const pushState = history.pushState;
-history.pushState = function() {
-  pushState.apply(history, arguments);
-  if (isActive) {
-    setTimeout(checkUrlChange, 100);
-  }
-};
-
-const replaceState = history.replaceState;
-history.replaceState = function() {
-  replaceState.apply(history, arguments);
-  if (isActive) {
-    setTimeout(checkUrlChange, 100);
-  }
-};
-
-window.addEventListener('popstate', () => {
-  if (isActive) {
-    setTimeout(checkUrlChange, 100);
-  }
-});
-
-function checkUrlChange() {
-  const currentUrl = window.location.href;
-  if (currentUrl !== lastUrl) {
-    const platform = PlatformDetector.detect(currentUrl);
-    if (platform.includes('Reels') || platform.includes('Video') || 
-        platform === 'Instagram Post') {
-      const cleanUrl = PlatformDetector.extractVideoUrl(currentUrl);
-      chrome.runtime.sendMessage({
-        action: 'newUrl',
-        url: cleanUrl,
-        platform: platform
-      });
+/**
+ * Dừng quét
+ */
+function stopScanning() {
+    console.log("Video Link Collector: Stopped scanning.");
+    if (scanInterval) {
+        clearInterval(scanInterval);
+        scanInterval = null;
     }
-    lastUrl = currentUrl;
-  }
 }
 
-console.log('Video Link Collector content script loaded');
+// Hỗ trợ bổ sung: Theo dõi sự thay đổi URL (cho các trang SPA)
+let lastUrl = location.href;
+new MutationObserver(() => {
+    const url = location.href;
+    if (url !== lastUrl) {
+        lastUrl = url;
+        if (isActive) scanLinksOnPage();
+    }
+}).observe(document, {subtree: true, childList: true});
