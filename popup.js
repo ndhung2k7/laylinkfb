@@ -2,10 +2,10 @@ let isRunning = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   // Load saved state
-  chrome.storage.local.get(['isRunning', 'collectedUrls'], (result) => {
+  chrome.storage.local.get(['isRunning'], (result) => {
     isRunning = result.isRunning || false;
     updateUI(isRunning);
-    updateStats(result.collectedUrls || []);
+    updateStats();
   });
 
   // Start button
@@ -40,36 +40,67 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Export button
+  // Export button - Xuất 3 file riêng biệt
   document.getElementById('exportBtn').addEventListener('click', () => {
-    chrome.storage.local.get(['collectedUrls'], (result) => {
-      const urls = result.collectedUrls || [];
-      if (urls.length === 0) {
-        alert('Không có link nào để export!');
-        return;
+    chrome.runtime.sendMessage({ action: 'getAllUrls' }, (response) => {
+      if (!response) return;
+      
+      const { facebook, tiktok, instagram } = response;
+      let exportedCount = 0;
+      
+      // Export Facebook links
+      if (facebook && facebook.length > 0) {
+        const facebookContent = facebook.join('\n');
+        downloadFile(facebookContent, 'facebook_links.txt');
+        exportedCount++;
       }
       
-      const content = urls.join('\n');
-      const blob = new Blob([content], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `video_links_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
+      // Export TikTok links
+      if (tiktok && tiktok.length > 0) {
+        const tiktokContent = tiktok.join('\n');
+        downloadFile(tiktokContent, 'tiktok_links.txt');
+        exportedCount++;
+      }
+      
+      // Export Instagram links
+      if (instagram && instagram.length > 0) {
+        const instagramContent = instagram.join('\n');
+        downloadFile(instagramContent, 'instagram_links.txt');
+        exportedCount++;
+      }
+      
+      if (exportedCount === 0) {
+        alert('Không có link nào để export!');
+      } else {
+        alert(`Đã export ${exportedCount} file:\n- facebook_links.txt (${facebook?.length || 0} links)\n- tiktok_links.txt (${tiktok?.length || 0} links)\n- instagram_links.txt (${instagram?.length || 0} links)`);
+      }
     });
   });
 
   // Clear button
   document.getElementById('clearBtn').addEventListener('click', () => {
     if (confirm('Bạn có chắc muốn xóa tất cả link đã thu thập?')) {
-      chrome.storage.local.set({ collectedUrls: [] }, () => {
-        updateStats([]);
-        alert('Đã xóa tất cả link!');
+      chrome.runtime.sendMessage({ action: 'clearAllUrls' }, (response) => {
+        if (response && response.success) {
+          updateStats();
+          alert('Đã xóa tất cả link!');
+        }
       });
     }
   });
 });
+
+function downloadFile(content, filename) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 function updateUI(running) {
   const startBtn = document.getElementById('startBtn');
@@ -90,37 +121,27 @@ function updateUI(running) {
   }
 }
 
-function updateStats(urls) {
-  document.getElementById('linkCount').textContent = urls.length;
-  
-  // Count by platform
-  const platformCount = {
-    'Facebook': 0,
-    'TikTok': 0,
-    'Instagram': 0,
-    'Other': 0
-  };
-  
-  urls.forEach(url => {
-    if (url.includes('facebook.com')) platformCount['Facebook']++;
-    else if (url.includes('tiktok.com')) platformCount['TikTok']++;
-    else if (url.includes('instagram.com')) platformCount['Instagram']++;
-    else platformCount['Other']++;
+function updateStats() {
+  chrome.runtime.sendMessage({ action: 'getAllUrls' }, (response) => {
+    if (!response) return;
+    
+    const { facebook, tiktok, instagram } = response;
+    const total = (facebook?.length || 0) + (tiktok?.length || 0) + (instagram?.length || 0);
+    
+    document.getElementById('linkCount').textContent = total;
+    
+    const statsText = [];
+    if (facebook?.length) statsText.push(`FB: ${facebook.length}`);
+    if (tiktok?.length) statsText.push(`TT: ${tiktok.length}`);
+    if (instagram?.length) statsText.push(`IG: ${instagram.length}`);
+    
+    document.getElementById('platformStats').textContent = statsText.join(' | ') || '-';
   });
-  
-  const statsText = Object.entries(platformCount)
-    .filter(([_, count]) => count > 0)
-    .map(([platform, count]) => `${platform}: ${count}`)
-    .join(' | ');
-  
-  document.getElementById('platformStats').textContent = statsText || '-';
 }
 
 // Listen for updates from background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'updateStats') {
-    chrome.storage.local.get(['collectedUrls'], (result) => {
-      updateStats(result.collectedUrls || []);
-    });
+    updateStats();
   }
 });
